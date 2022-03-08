@@ -3,12 +3,11 @@ np.random.seed(0)
 from numpy.linalg import norm
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-plt.rcParams.update({
-    "text.usetex": True})
+plt.rcParams.update({"text.usetex": True})
 
 
 N = 10000
-c0 = 1
+c0 = 2
 mu = np.array([0, -200, 0])
 sigmas = np.array([100, 50, 100])
 cov = np.diag(sigmas)
@@ -20,7 +19,6 @@ def F_hat(omega):
 def G_hat(omega, x, y):
     return 1 / (4*np.pi*norm(x-y)) * np.exp(1j * omega/c0*norm(x-y))
 
-
 def plot_F_hat():
     omega = np.linspace(0,20,100)
     f_vals = F_hat(omega)
@@ -28,19 +26,33 @@ def plot_F_hat():
     plt.plot(omega, f_vals)
     plt.show()
 
-omega = np.linspace(-3,3,100)
+def plot_ys(ys):
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    ax.scatter(ys[:,0], ys[:,1], ys[:,2])
+    ax.set_xlabel("dim1")
+    ax.set_ylabel("dim2")
+    ax.set_zlabel("dim3")
+    plt.savefig("q1/plot_ys.png")
+    return
 
-xs = np.array([[0,50*j,0] for j in range(5)])
+
+omega = np.linspace(-3,3,100)
 ys = np.random.multivariate_normal(mu ,cov, N)
 with open("q1/ys.npy", "wb") as f:
     np.save(f, ys)
-fig = plt.figure()
-ax = fig.add_subplot(projection='3d')
-ax.scatter(ys[:,0], ys[:,1], ys[:,2])
-ax.set_xlabel("dim1")
-ax.set_ylabel("dim2")
-ax.set_zlabel("dim3")
-plt.savefig("q1/plot_ys.png")
+
+
+def get_xs(case):
+    if case == 1:
+        xs = np.array([[0,50*j,0] for j in range(5)])
+        return xs
+    if case == 2:
+        xs = np.array([[0,5*j,0] for j in range(5)])
+        return xs
+    else:
+        xs = np.array([[50*(j-2),100,0] for j in range(5)])
+        return xs
 
 
 def C_N(tau, x1, x2):
@@ -58,21 +70,35 @@ def C_N(tau, x1, x2):
     return np.real(res)
 
 
-taus = np.linspace(-10,10,100)
-C_N_vals = [dict() for j in range(5)]
-for j in range(5):
-    for tau in tqdm(taus):
-        C_N_vals[j][tau] = C_N(tau, xs[j], xs[0])
-    with open(f"q1/case1/C_N_x{j+1}.npy", "wb") as f:
-        np.save(f, C_N_vals[j])
-    plt.figure()
-    plt.plot(C_N_vals[j].keys(), C_N_vals[j].values())
-    plt.xlabel(r"$\tau$")
-    plt.ylabel(r"$C_N(\tau,x_1,x_1)$")
-    plt.savefig(f"q1/case1/plot_x{j+1}x1.png")
+# for case in [1, 2, 3]:
+#     xs = get_xs(case)
+#     taus = np.linspace(-10,10,100)
+#     C_N_vals = [dict() for j in range(5)]
+#     for j in range(5):
+#         for tau in tqdm(taus):
+#             C_N_vals[j][tau] = C_N(tau, xs[j], xs[0])
+#         with open(f"q1/case{case}/C_N_x{j+1}.npy", "wb") as f:
+#             np.save(f, C_N_vals[j])
+#         plt.figure()
+#         plt.plot(C_N_vals[j].keys(), C_N_vals[j].values())
+#         plt.xlabel(r"$\tau$")
+#         plt.ylabel(r"$C_N(\tau,x_{j+1},x_1)$")
+#         plt.savefig(f"q1/case{case}/plot_x{j+1}x1.png")
 
-# plt.figure()
-# plt.plot(taus, C_N_vals)
-# plt.xlabel(r"$\tau$")
-# plt.ylabel(r"$C_N(\tau,x_1,x_1)$")
-# plt.show()
+for case in [2]:
+    xs = get_xs(case)
+    taus = np.linspace(-10,10,100)
+    C_N_vals = [dict() for j in range(5)]
+    for j in range(5):
+        for tau in tqdm(taus):
+            C_N_vals[j][tau] = C_N(tau, xs[j], xs[0])
+        # with open(f"q1/case{case}/C_N_x{j+1}.npy", "wb") as f:
+        #     np.save(f, C_N_vals[j])
+        plt.figure()
+        plt.plot(C_N_vals[j].keys(), C_N_vals[j].values())
+        plt.xlabel(r"$\tau$")
+        plt.ylabel(r"$C_N(\tau,x_{},x_1)$".format(j+1))
+        plt.savefig(f"q1/case{case}_c0_2/plot_x{j+1}x1.png")
+
+
+# plot_F_hat()
