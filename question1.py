@@ -1,10 +1,10 @@
-from functools import total_ordering
 import numpy as np
-from numpy.fft import ifftshift, fftshift, ifft
+from numpy.fft import ifftshift, fftshift, ifft, fft
 from numpy.linalg import norm
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 plt.rcParams.update({"text.usetex": True})
+import sys
 
 # FIX SEED
 np.random.seed(0)
@@ -55,9 +55,9 @@ def plot_ys(ys):
     plt.close()
 
 
-omega = np.linspace(-10,10,201)
+omega = np.linspace(-3,3,201)
 ys = np.random.multivariate_normal(mu ,cov, N)
-# plot_ys(ys)
+plot_ys(ys)
 with open("q1/ys.npy", "wb") as f:
     np.save(f, ys)
 
@@ -74,19 +74,31 @@ def get_xs(case):
         return xs
 
 
-def C_N(tau, x1, x2):
-    res = 0
-    step = omega[1] - omega[0]
-    for y in ys:
-        f_val = F_hat(omega)
-        g_val1 = G_hat(omega, x1, y)
-        g_val2 = G_hat(omega, x2, y)
-        assert f_val.shape == g_val1.shape
-        assert f_val.shape == g_val2.shape
-        int_val = np.sum(f_val*np.conj(g_val1)*g_val2*np.exp(-1j*omega*tau)*step)
-        res += int_val
-    res /= 2*np.pi*N
-    return np.real(res)
+def C_N(taus, x1, x2):
+    d_omega = omega[1] - omega[0]
+    # res = np.zeros(taus.shape, dtype=np.complex128)
+    # for y in ys:
+    #     f_vals = F_hat(omega)
+    #     g_vals1 = G_hat(omega, x1, y)
+    #     g_vals2 = G_hat(omega, x2, y)
+    #     assert f_vals.shape == g_vals1.shape
+    #     assert f_vals.shape == g_vals2.shape
+    #     imag_exp = np.exp(-1j*omega[:,None]*taus[None,:])   # len(omega) x len(taus)
+    #     int_vals = np.sum(f_vals[:,None]*np.conj(g_vals1)[:,None]*g_vals2[:,None]*imag_exp, axis=0)*d_omega
+    #     res += int_vals
+    # res /= 2*np.pi*N
+
+    f_vals = F_hat(omega)
+    g_vals1 = G_hat_vect(omega, x1, ys)
+    g_vals2 = G_hat_vect(omega, x2, ys)
+
+    integrand_vals = f_vals[:,None]*np.conj(g_vals1)*g_vals2  # len(omega) x len(ys)
+    imag_exp = np.exp(-1j*omega[:,None]*taus[None,:])   # len(omega) x len(taus)
+    volume_int = np.sum(integrand_vals,axis=1)          # len(omega)
+    C_N_vals = np.sum(volume_int[:,None]*imag_exp, axis=0)*d_omega / (2*np.pi*N)
+    C_N_vals = np.real(C_N_vals)
+
+    return C_N_vals
 
 def C_N_ifft(x1, x2):
     C_N_vals = np.zeros(omega.shape)
@@ -111,6 +123,7 @@ def C_N_ifft(x1, x2):
 
 
 def gaussian_process(T, nb_samples):
+    # méthode spectrale
     ts = np.linspace(0, T, nb_samples)
     X = np.random.randn(len(omega))
     Y = np.random.randn(len(omega))
@@ -199,13 +212,14 @@ def plot_ygrid(ygrid):
 def G_hat_vect(omega, x, y):
     _x = x.copy()
     _y = y.copy()
-    if _x.ndim == 1:
-        _x = _x[np.newaxis,:]
+    # if _x.ndim == 1:
+    #     _x = _x[np.newaxis,:]
     if _y.ndim == 1:
         _y = _y[np.newaxis,:]
-    dist_xy = norm(_x-_y,axis=1)
+    dist_xy = norm(_x[None,:]-_y,axis=1)    # len(y)
+    assert np.allclose(dist_xy, np.sqrt(np.sum((_x[None,:]-_y)**2, axis=1)))
     res =  1 / (4*np.pi*dist_xy[None,:]) * np.exp(1j * omega[:,None]/c0*dist_xy[None,:])
-    return res      # len(omega) * len(y)
+    return res      # len(omega) x len(y)
 
 
 def K(y):
@@ -218,7 +232,7 @@ def K(y):
     return res
 
 
-def C_1_ifft(x1, x2, taus, nb_pts_by_axis=100):
+def C_1(x1, x2, taus, nb_pts_by_axis=100):
     interval1 = np.linspace(-300,300,nb_pts_by_axis)
     interval2 = np.linspace(-150,150,nb_pts_by_axis)
     interval3 = np.linspace(-300,300,nb_pts_by_axis)
@@ -243,14 +257,14 @@ def C_1_ifft(x1, x2, taus, nb_pts_by_axis=100):
     # plt.savefig("plot_K_ygrid.png")
 
     f_vals = F_hat(omega)
-    g_vals1 =G_hat_vect(omega, x1, ygrid)
+    g_vals1 = G_hat_vect(omega, x1, ygrid)
     g_vals2 = G_hat_vect(omega, x2, ygrid)
 
     # len(omega) x len(ygrid)
     integrand_vals = K_vals[np.newaxis,:]*f_vals[:,np.newaxis]*np.conj(g_vals1)*g_vals2
     imag_exp = np.exp(-1j*omega[:,np.newaxis]*taus[np.newaxis,:])   # len(omega) x len(taus)
-    volume_int = np.sum(integrand_vals*volume,axis=1)           # len(omega)
-    C_1_vals = np.sum(volume_int[:,np.newaxis]*d_omega*imag_exp, axis=0) / (2*np.pi)
+    volume_int = np.sum(integrand_vals,axis=1)*volume           # len(omega)
+    C_1_vals = np.sum(volume_int[:,np.newaxis]*imag_exp, axis=0)*d_omega / (2*np.pi)
     C_1_vals = np.real(C_1_vals)                                # len(taus)
     return C_1_vals
 
@@ -259,32 +273,70 @@ def C_1_ifft(x1, x2, taus, nb_pts_by_axis=100):
 def plot_C_T_N():
     T = 200
     nb_samples = 500
-    u_vals_by_xs = []
-    for j in range(5):
-        u_vals = np.load(open(f"u_vals/u_vals_x{j+1}.npy", "rb"))
-        u_vals_by_xs.append(u_vals)
     ts = np.linspace(0, T, nb_samples)
     dt = ts[1] - ts[0]
-    tau_max = 50
-    C_T_N_vals_by_xs = []
+    tau_max = 100
     nb_taus = int(tau_max//dt)
-    taus = [k*dt for k in range(-nb_taus+1,nb_taus)]
-    for j in tqdm(range(5)):
-        C_T_N_vals_neg = np.array([np.mean(u_vals_by_xs[j][k:] * u_vals_by_xs[0][:-k or None]) for k in range(nb_taus-1,0,-1)])
-        C_T_N_vals_pos = np.array([np.mean(u_vals_by_xs[j][:-k or None] * u_vals_by_xs[0][k:]) for k in range(nb_taus)])
-        C_T_N_vals = np.concatenate([C_T_N_vals_neg, C_T_N_vals_pos], axis=0)
-        C_T_N_vals_by_xs.append(C_T_N_vals)
-        plt.figure()
-        plt.plot(taus, C_T_N_vals)
-        plt.savefig(f"C_T_N_x{j+1}x1.png")
+    taus = np.array([k*dt for k in range(-nb_taus+1,nb_taus)])
 
-xs = get_xs(case=2)
-taus = np.linspace(-20,20,100)
-for j in tqdm(range(5)):
-    C_1_vals = C_1_ifft(xs[j], xs[0], taus, nb_pts_by_axis=50)
-    # plt.figure()
-    # plt.plot(taus, C_1_vals)
-    # plt.savefig(f"C_1_x{j+1}x1.png")
+    for case in [1,2,3]:
+        u_vals = [None for j in range(5)]
+        for j in range(5):
+            vals = np.load(open(f"u_vals/u_vals_x{j+1}.npy", "rb"))
+            u_vals[j] = vals
+
+        C_T_N_vals = [None for j in range(5)]
+        for j in tqdm(range(5)):
+            vals_neg = np.array([np.mean(u_vals[j][k:] * u_vals[0][:-k or None])
+                                 for k in range(nb_taus-1,0,-1)])
+            vals_pos = np.array([np.mean(u_vals[j][:-k or None] * u_vals[0][k:])
+                                 for k in range(nb_taus)])
+            vals = np.concatenate([vals_neg, vals_pos], axis=0)
+            C_T_N_vals[j] = vals
+            with open(f"q2/case{case}/C_T_N_x{j+1}.npy", "wb") as f:
+                np.save(f, C_T_N_vals[j])
+
+        val_min = min([C_T_N_vals[j].min() for j in range(5)])
+        val_max = max([C_T_N_vals[j].max() for j in range(5)])
+        val_range = val_max - val_min
+        for j in range(5):
+            plt.figure()
+            plt.plot(taus, C_T_N_vals[j])
+            plt.ylim(val_min - 0.1*val_range, val_max + 0.1*val_range)
+            plt.xlabel(r"$\tau$")
+            plt.ylabel(rf"$C_{T,N}(\tau,x_{j+1},x_1)$")
+            plt.savefig(f"q2/case{case}/plot_C_T_N_x{j+1}x1.png")
+            plt.close()
+
+
+
+
+
+
+
+
+
+
+def plot_C_1():
+    taus = np.linspace(-100,100,1000)
+    for case in [1,2,3]:
+        xs = get_xs(case)
+        C_1_vals = [None for j in range(5)]
+        for j in tqdm(range(5)):
+            C_1_vals[j] = C_1(xs[j], xs[0], taus, nb_pts_by_axis=50)
+            with open(f"q2/case{case}/C_1_x{j+1}.npy", "wb") as f:
+                np.save(f, C_1_vals[j])
+
+        val_min = min([C_1_vals[j].min() for j in range(5)])
+        val_max = max([C_1_vals[j].max() for j in range(5)])
+        val_range = val_max - val_min
+        for j in range(5):
+            plt.figure()
+            plt.plot(taus, C_1_vals[j])
+            plt.ylim(val_min - 0.1*val_range, val_max + 0.1*val_range)
+            plt.xlabel(r"$\tau$")
+            plt.ylabel(rf"$C_1(\tau,x_{j+1},x_1)$")
+            plt.savefig(f"q2/case{case}/plot_C_1_x{j+1}x1.png")
 
 
 
@@ -330,21 +382,32 @@ for j in tqdm(range(5)):
 #     plt.savefig(f"Essai_C_N_x{j+1}x1.png")
 
 
+def plot_q1():
+    for case in [1, 2, 3]:
+        xs = get_xs(case)
+        taus = np.linspace(-100,100,1000)
+        C_N_vals = [None for j in range(5)]
+        for j in tqdm(range(5)):
+            C_N_vals[j] = C_N(taus, xs[j], xs[0])
+            with open(f"q1/case{case}/C_N_x{j+1}.npy", "wb") as f:
+                np.save(f, C_N_vals[j])
 
-# for case in [1, 2, 3]:
-#     xs = get_xs(case)
-#     taus = np.linspace(-10,10,100)
-#     C_N_vals = [dict() for j in range(5)]
-#     for j in range(5):
-#         for tau in tqdm(taus):
-#             C_N_vals[j][tau] = C_N(tau, xs[j], xs[0])
-#         with open(f"q1/case{case}/C_N_x{j+1}.npy", "wb") as f:
-#             np.save(f, C_N_vals[j])
-#         plt.figure()
-#         plt.plot(C_N_vals[j].keys(), C_N_vals[j].values())
-#         plt.xlabel(r"$\tau$")
-#         plt.ylabel(r"$C_N(\tau,x_{j+1},x_1)$")
-#         plt.savefig(f"q1/case{case}/plot_x{j+1}x1.png")
+        val_min = min([C_N_vals[j].min() for j in range(5)])
+        val_max = max([C_N_vals[j].max() for j in range(5)])
+        val_range = val_max - val_min
+        for j in tqdm(range(5)):
+            plt.figure()
+            plt.plot(taus, C_N_vals[j])
+            plt.ylim(val_min - 0.1*val_range, val_max + 0.1*val_range)
+            plt.xlabel(r"$\tau$")
+            plt.ylabel(rf"$C_N(\tau,x_{j+1},x_1)$")
+            plt.savefig(f"q1/case{case}/plot_C_N_x{j+1}x1.png")
+            plt.close()
+
+
+# plot_q1()
+# plot_C_1()
+plot_C_T_N()
 
 # for case in [2]:
 #     xs = get_xs(case)
@@ -362,4 +425,3 @@ for j in tqdm(range(5)):
 #         plt.savefig(f"q1/case{case}_c0_2/plot_x{j+1}x1.png")
 
 
-# plot_F_hat()
