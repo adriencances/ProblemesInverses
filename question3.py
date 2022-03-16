@@ -66,24 +66,6 @@ def get_xs(case):
         return xs
 
 
-# def gaussian_process(T, nb_samples):
-#     ts = np.linspace(0, T, nb_samples)
-#     X = np.random.randn(len(omega))
-#     Y = np.random.randn(len(omega))
-#     vals = X[:,None]*np.cos(omega[:,None]*ts[None,:])    # N*nb_samples
-#     vals += Y[:,None]*np.sin(omega[:,None]*ts[None,:])
-#     vals *= np.sqrt(F_hat(omega))[:,None]
-#     vals *= np.sqrt(omega[1]-omega[0])
-#     process = np.sum(vals, axis=0)
-#     return process
-
-# def simulate_source(T, nb_samples):
-#     source = []
-#     N = len(ys)
-#     for i in tqdm(range(N)):
-#         source.append(gaussian_process(T, nb_samples))
-#     return np.array(source)         # N x nb_samples
-
 def simulate_source():
     T = 10000
     tau_max = 100
@@ -92,7 +74,6 @@ def simulate_source():
     ts -= T//2
     f_vals = F(ts)
     sqrt_fft_vals = np.sqrt(fft(fftshift(f_vals)))
-    # source = np.zeros((N, len(ts)))
     # Calcul par tranches de 100
     source = np.zeros((100, len(ts)))
     for id_y in tqdm(range(N)):
@@ -103,23 +84,31 @@ def simulate_source():
             with open(f"u_vals/source/source_vals_slice_{slice_id}.npy", "wb") as f:
                 np.save(f, source)
 
-def simulate_u(T, nb_samples):
-    # source = np.load(open(f"u_vals/source_vals.npy", "rb"))
-    # source = source[:,:nb_samples]
-    # source = np.hstack([source, np.zeros((N,1))])
+def simulate_u(T, nb_samples, new_N=None, cases=None):
+    if new_N is None:
+        new_N = N
+    nb_slices = max(new_N // 100, 1)
+    if cases is None:
+        cases = [1,2,3]
 
-    for case in [1,2,3]:
+    for case in cases:
         xs = get_xs(case)
         dist_to_xs = np.sum((ys[None,:,:] - xs[:,None,:])**2, axis=2)**0.5        # 5 x N
         u_vals_by_xs = [np.zeros((nb_samples)) for j in range(5)]
         slice_size = 100
-        for slice_id in tqdm(range(100)):
+        if new_N < N:
+            slice_size = new_N
+        for slice_id in tqdm(range(nb_slices)):
             source = np.load(open(f"u_vals/source/source_vals_slice_{slice_id}.npy", "rb"))
-            source = np.hstack([source, np.zeros((slice_size,1))])
-            dist_to_xs_slice = dist_to_xs[:,slice_id*100:(slice_id+1)*100]
+            if new_N < 100:
+                source = source[:new_N]
+            source = np.hstack([source, np.zeros((len(source),1))])
+            if new_N < 100:
+                dist_to_xs_slice = dist_to_xs[:,:new_N]
+            else:
+                dist_to_xs_slice = dist_to_xs[:,slice_id*100:(slice_id+1)*100]
             for j in range(5):
-                x = xs[j]
-                factor = 1/(np.sqrt(N)*4*np.pi*dist_to_xs_slice[j])         # n
+                factor = 1/(np.sqrt(new_N)*4*np.pi*dist_to_xs_slice[j])         # n
                 ts = np.linspace(0, T, nb_samples)
                 inds = ts[:,None] - dist_to_xs_slice[j][None,:]/c0          # nb_samples x n
                 inds = np.floor(inds*nb_samples/T).astype(np.int64)
@@ -131,19 +120,17 @@ def simulate_u(T, nb_samples):
                 u_vals = np.sum(source_vals*factor[None,:], axis=1)
                 u_vals_by_xs[j] += u_vals
         for j in range(5):
-            with open(f"u_vals/case{case}/ESSAI_u_vals_x{j+1}.npy", "wb") as f:
+            with open(f"u_vals/case{case}/u_vals_N_{new_N}_x{j+1}.npy", "wb") as f:
                 np.save(f, u_vals_by_xs[j])
             plt.figure()
             plt.plot(ts, u_vals_by_xs[j])
-            plt.savefig(f"u_vals/case{case}/ESSAI_plot_u_vals_x{j+1}.png")
+            plt.savefig(f"u_vals/case{case}/plot_u_vals_N_{new_N}_x{j+1}.png")
             plt.close()
 
 
 def G_hat_vect(omega, x, y):
     _x = x.copy()
     _y = y.copy()
-    # if _x.ndim == 1:
-    #     _x = _x[np.newaxis,:]
     if _y.ndim == 1:
         _y = _y[np.newaxis,:]
     dist_xy = norm(_x[None,:]-_y,axis=1)    # len(y)
@@ -206,8 +193,12 @@ def plot_C_T_N(T, nb_samples):
 T = 10000
 tau_max = 100
 nb_samples = 1000*T//tau_max
+
 # simulate_u(T, nb_samples)
-plot_C_T_N(T, nb_samples)
+# plot_C_T_N(T, nb_samples)
+# for new_N in [100, 1000, 10000]:
+for new_N in [1, 10, 50]:
+    simulate_u(T, nb_samples, new_N)
 
 # for T in [1000, 5000, 10000, 50000]:
 # # for T in [5000]:

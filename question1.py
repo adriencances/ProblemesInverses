@@ -324,8 +324,8 @@ def plot_C_1():
         C_1_vals = [None for j in range(5)]
         for j in tqdm(range(5)):
             C_1_vals[j] = C_1(xs[j], xs[0], taus, nb_pts_by_axis=50)
-            with open(f"q2/case{case}/C_1_x{j+1}.npy", "wb") as f:
-                np.save(f, C_1_vals[j])
+            # with open(f"q2/case{case}/C_1_x{j+1}.npy", "wb") as f:
+            #     np.save(f, C_1_vals[j])
 
         val_min = min([C_1_vals[j].min() for j in range(5)])
         val_max = max([C_1_vals[j].max() for j in range(5)])
@@ -336,7 +336,7 @@ def plot_C_1():
             plt.ylim(val_min - 0.1*val_range, val_max + 0.1*val_range)
             plt.xlabel(r"$\tau$")
             plt.ylabel(rf"$C_1(\tau,x_{j+1},x_1)$")
-            plt.savefig(f"q2/case{case}/plot_C_1_x{j+1}x1.png")
+            # plt.savefig(f"q2/case{case}/plot_C_1_x{j+1}x1.png")
 
 
 
@@ -406,8 +406,8 @@ def plot_q1():
 
 
 # plot_q1()
-# plot_C_1()
-plot_C_T_N()
+plot_C_1()
+# plot_C_T_N()
 
 # for case in [2]:
 #     xs = get_xs(case)
